@@ -2,7 +2,7 @@ import { parse } from "https://deno.land/x/plist@0.0.1/mod.ts";
 import { existsSync, moveSync, walk } from "jsr:@std/fs";
 
 const SOFTWARE_UPD_URL =
-	"https://swscan.apple.com/content/catalogs/others/index-11-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog";
+	"https://swscan.apple.com/content/catalogs/others/index-14-13-12-10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog.gz";
 
 async function main() {
 	const macModel = prompt("Enter your Mac model (e.g. iMac12,2):", "iMac12,2");
@@ -32,8 +32,7 @@ async function main() {
 		}
 	}
 
-	// this ends up as { "84-whatever" : Product, "85-whatever" : Product }
-	const bootCampProducts: { [key: string]: any } = {};
+	const bootCampProducts: [string, Product][] = [];
 	const regexModel = "([a-zA-Z]{4,12}[1-9]{1,2}\,[1-6])";
 	for (const [i, product] of possibleBootCampProducts) {
 		if ("English" in product.Distributions) {
@@ -43,29 +42,41 @@ async function main() {
 				const supportedModels = dist.matchAll(RegExp(regexModel, "g")).toArray()
 					.map((m) => m[0]);
 				if (supportedModels.includes(macModel)) {
-					bootCampProducts[i] = product;
+					bootCampProducts.push([i, product]);
 				}
 			}
 		}
 	}
 
+	if(bootCampProducts.length === 0) {
+		console.log("No Bootcamp Support Software found for this Mac model.");
+		return Deno.exit(1);
+	}
+
 	let chosenProduct: [string, Product] | undefined;
 
 	for (const key in bootCampProducts) {
-		console.log(`[${key}] ${bootCampProducts[key].PostDate}`);
+		console.log(`[${bootCampProducts[key][0]}] ${bootCampProducts[key][1].PostDate}`);
 	}
 
-	for (const key in bootCampProducts) {
-		if (!chosenProduct) {
-			chosenProduct = [key, bootCampProducts[key]];
-		}
-
-		const currentProduct = bootCampProducts[key];
-		const chosenProductDate = new Date(chosenProduct[1].PostDate);
-		const currentProductDate = new Date(currentProduct.PostDate);
-
-		if (currentProductDate > chosenProductDate) {
-			chosenProduct = [key, currentProduct];
+	if(!confirm("Do you want to choose which Bootcamp Support Software to download?")) {
+		chosenProduct = chooseLatestFrom(bootCampProducts);
+	} else {
+		const key = prompt("Enter the key of the Bootcamp Support Software you want to download:");
+		if(!key) {
+			console.log("No key provided.");
+			chosenProduct = chooseLatestFrom(bootCampProducts);
+		} else {
+			for (const product of bootCampProducts) {
+				if(product[0] === key) {
+					chosenProduct = product;
+					break;
+				}
+			}
+			if(!chosenProduct) {
+				console.log("Invalid key provided.");
+				chosenProduct = chooseLatestFrom(bootCampProducts);
+			}
 		}
 	}
 
@@ -196,6 +207,26 @@ async function expandGlobSync(pattern: RegExp, options: { root: string }) {
 			return entry.path;
 		}
 	}
+}
+
+function chooseLatestFrom(bootCampProducts: [string, Product][]) {
+	var chosenProduct: [string, Product] | undefined;
+
+	for (const key in bootCampProducts) {
+		if (!chosenProduct) {
+			chosenProduct = [bootCampProducts[key][0], bootCampProducts[key][1]];
+		}
+
+		const currentProduct = bootCampProducts[key];
+		const chosenProductDate = new Date(chosenProduct[1].PostDate);
+		const currentProductDate = new Date(currentProduct[1].PostDate);
+
+		if (currentProductDate > chosenProductDate) {
+			chosenProduct = [bootCampProducts[key][0], currentProduct[1]];
+		}
+	}
+
+	return chosenProduct;
 }
 
 interface Product {
